@@ -1,6 +1,15 @@
 const fs = require("fs");
 const path = require("path");
-const login = require("ws3-fca");
+
+// Résolution robuste de l'import de ws3-fca (gestion de l'export CommonJS / ES Module)
+let login = require("ws3-fca");
+if (typeof login !== "function") {
+  if (login && typeof login.default === "function") {
+    login = login.default;
+  } else if (login && typeof login.login === "function") {
+    login = login.login;
+  }
+}
 
 /**
  * Lit et parse de manière sécurisée un fichier JSON
@@ -32,7 +41,12 @@ const { chargerCommandes, gererMessage } = require("./handler/handleMessage.js")
 
 // 3. Détermination du profil/compte Facebook à utiliser
 const nomCompte = config.compteActif || "principal";
-const cheminAppstate = path.join(__dirname, "accounts", `${nomCompte}.json`);
+const cheminAccounts = path.join(__dirname, "accounts");
+if (!fs.existsSync(cheminAccounts)) {
+  fs.mkdirSync(cheminAccounts, { recursive: true });
+}
+
+const cheminAppstate = path.join(cheminAccounts, `${nomCompte}.json`);
 
 // 4. Vérification de l'existence de la session (appstate)
 if (!fs.existsSync(cheminAppstate)) {
@@ -49,23 +63,32 @@ if (!appstate) {
   process.exit(1);
 }
 
-// 5. Chargement des commandes dans la mémoire
+// 5. Assurance de l'existence du dossier commands et chargement
 const cheminCommandes = path.join(__dirname, "commands");
-const commandes = chargerCommandes(cheminCommandes);
+if (!fs.existsSync(cheminCommandes)) {
+  fs.mkdirSync(cheminCommandes, { recursive: true });
+  console.log("📁 Le dossier 'commands/' a été créé automatiquement.");
+}
 
+const commandes = chargerCommandes(cheminCommandes);
 console.log(`📦 ${commandes.size || 0} commande(s) chargée(s) avec succès.`);
 
 /**
  * Initialise la connexion à l'API Messenger et démarre l'écouteur MQTT
  */
 function demarrerBot() {
+  if (typeof login !== "function") {
+    console.error("❌ Impossible de charger la fonction 'login' de ws3-fca.");
+    process.exit(1);
+  }
+
   login({ appState: appstate }, (err, api) => {
     if (err) {
       console.error("❌ Erreur critique lors de la connexion Facebook :", err);
       return;
     }
 
-    // Définition des options minimales de confidentialité et de comportement
+    // Options de confidentialité et comportement du bot
     api.setOptions({
       listenEvents: true,
       selfListen: false,
@@ -83,13 +106,13 @@ function demarrerBot() {
         return;
       }
 
-      // Filtrage : on ne traite que les messages textes et les réponses
+      // Filtrage : uniquement les messages textes et réponses
       if (event.type !== "message" && event.type !== "message_reply") return;
 
       // Détection des messages privés (1-à-1)
       const estPrive = event.threadID === event.senderID;
 
-      // Si configuré pour répondre uniquement en PV et que ce n'est pas un PV, on ignore
+      // Si configuré pour répondre uniquement en PV et que ce n'est pas un PV
       if (config.repondreSeulementEnPv && !estPrive) return;
 
       // Traitement du message via le handler
@@ -97,15 +120,13 @@ function demarrerBot() {
         await gererMessage({ api, event, config, commandes });
       } catch (cmdError) {
         console.error(`❌ Erreur d'exécution de commande pour [${event.threadID}] :`, cmdError);
-        
-        // Envoi d'un message d'erreur d'urgence à l'utilisateur
         api.sendMessage("❌ Une erreur interne est survenue lors du traitement de votre commande.", event.threadID);
       }
     });
   });
 }
 
-// Gestion propre de l'arrêt du processus (ex: CTRL+C ou arrêt serveur)
+// Gestion propre de l'arrêt et des exceptions globales
 process.on("SIGINT", () => {
   console.log("\n🛑 Arrêt du bot demandé par l'utilisateur...");
   process.exit(0);
@@ -115,6 +136,6 @@ process.on("uncaughtException", (error) => {
   console.error("💥 Exception non capturée :", error);
 });
 
-// Lancement du bot
+// Lancement principal
 demarrerBot();
 
