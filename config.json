@@ -1,9 +1,9 @@
 {
-"botName": "Bot option",
+"botName": "Hentai bot",
 "compteActif": "principal",
 "prefix": "!",
 "prefixRequis": true,
 "admins": ["61591895887142"],
-"repondreSeulementEnPv": true,
+"repondreSeulementEnPv": false,
 "delaiEntreMessagesMs": 1500
 }
