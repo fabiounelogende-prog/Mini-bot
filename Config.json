@@ -1,0 +1,8 @@
+{
+  "botName": "MiniBot",
+  "compteActif": "principal",
+  "prefix": "!",
+  "admins": ["TON_ID_FACEBOOK_ICI"],
+  "repondreSeulementEnPv": true,
+  "delaiEntreMessagesMs": 1500
+}
