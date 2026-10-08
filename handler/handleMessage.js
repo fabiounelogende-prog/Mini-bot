@@ -1,16 +1,31 @@
 const fs = require("fs");
 const path = require("path");
 
+// Map pour gérer les temps d'attente (cooldowns)
+const cooldowns = new Map();
+
 /**
- * Charge dynamiquement toutes les commandes du dossier spécifié
- * @param {string} dossier - Chemin absolu du dossier des commandes
- * @returns {Map} Map contenant les commandes indexées par nom et alias
+ * Convertit du texte standard en police Unicode Sans-Serif Grasse (Aesthetic Bold)
+ */
+function toUnicodeBold(str = "") {
+  const normal = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const bold   = "𝖺𝖻𝖼𝖽𝖾𝖿𝗀𝗁𝗂沉𝗄𝗅𝗆𝗇𝗈𝗉𝗊𝗋𝗌𝗍𝗎𝗏𝗐𝗑𝗒𝗓𝖠𝖡𝖢𝖣𝖤𝖥𝖭𝖧𝖨𝖩𝖪𝖫𝖬𝖭𝖮𝖯𝖰𝖱𝖲𝖳𝖴𝖵𝖶𝖷𝖸𝖹𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫";
+  
+  // Mapping direct pour un style élégant et lisible sur tous les téléphones
+  return str.split("").map((char) => {
+    const index = normal.indexOf(char);
+    return index !== -1 ? bold[index] || char : char;
+  }).join("");
+}
+
+/**
+ * Charge dynamiquement toutes les commandes natives du dossier commands/
  */
 function chargerCommandes(dossier) {
   const commandes = new Map();
 
   if (!fs.existsSync(dossier)) {
-    console.warn(`⚠️ Le dossier des commandes n'existe pas : ${dossier}`);
+    fs.mkdirSync(dossier, { recursive: true });
     return commandes;
   }
 
@@ -19,35 +34,26 @@ function chargerCommandes(dossier) {
   for (const fichier of fichiers) {
     try {
       const cheminFichier = path.join(dossier, fichier);
-
-      // Invalidation du cache de require en cas de rechargement à chaud
       delete require.cache[require.resolve(cheminFichier)];
 
       const commande = require(cheminFichier);
       const config = commande.config || {};
       const nomCmd = config.name;
 
-      // Prise en charge des deux syntaxes d'exécution (GoatBot/Cassidy "onStart" et standard "run")
-      const execFn = commande.onStart || commande.run;
-
-      if (!nomCmd || typeof execFn !== "function") {
-        console.warn(`⚠️ Commande ignorée (structure invalide ou fonction manquante) : ${fichier}`);
+      if (!nomCmd || typeof commande.run !== "function") {
+        console.warn(`⚠️  [CÉLESTIN] Commande ignorée (manque config.name ou run) : ${fichier}`);
         continue;
       }
 
-      // Enregistrement par le nom principal
       commandes.set(nomCmd.toLowerCase(), commande);
 
-      // Enregistrement des alias s'ils existent
       if (Array.isArray(config.aliases)) {
         config.aliases.forEach((alias) => {
-          if (typeof alias === "string" && alias.trim()) {
-            commandes.set(alias.toLowerCase().trim(), commande);
-          }
+          if (alias) commandes.set(alias.toLowerCase().trim(), commande);
         });
       }
     } catch (e) {
-      console.warn(`⚠️ Impossible de charger le fichier ${fichier} :`, e.message);
+      console.error(`❌ [CÉLESTIN] Erreur lors du chargement de ${fichier} :`, e.message);
     }
   }
 
@@ -55,7 +61,7 @@ function chargerCommandes(dossier) {
 }
 
 /**
- * Traite et exécute les messages entrants depuis Messenger
+ * Traite les messages entrants et exécute les commandes avec un design soigné
  */
 async function gererMessage({ api, event, config, commandes }) {
   const body = (event.body || "").trim();
@@ -63,69 +69,82 @@ async function gererMessage({ api, event, config, commandes }) {
 
   const prefix = config.prefix || "!";
   const admins = Array.isArray(config.admins) ? config.admins : [];
-  const prefixRequis = config.prefixRequis !== false;
 
-  const avecPrefixe = body.startsWith(prefix);
-  let args = [];
-  let nomCommande = "";
+  // Détection du préfixe
+  if (!body.startsWith(prefix)) return;
 
-  if (avecPrefixe) {
-    args = body.slice(prefix.length).trim().split(/\s+/);
-    nomCommande = (args.shift() || "").toLowerCase();
-  } else if (!prefixRequis) {
-    args = body.split(/\s+/);
-    nomCommande = (args.shift() || "").toLowerCase();
-  } else {
-    // Le préfixe est obligatoire et absent -> on ignore silencieusement
-    return;
-  }
+  const args = body.slice(prefix.length).trim().split(/\s+/);
+  const nomCommande = (args.shift() || "").toLowerCase();
 
   if (!nomCommande) return;
 
-  const commande = commandes.get(nomCommande);
+  // Raccourci natif "reply" avec mise en page automatique
+  const reply = (messageText) => {
+    return api.sendMessage(messageText, event.threadID, event.messageID);
+  };
 
+  const commande = commandes.get(nomCommande);
   if (!commande) {
-    if (!avecPrefixe) return;
-    return api.sendMessage(
-      `❌ Commande inconnue. Tapez ${prefix}help pour consulter la liste des commandes.`,
-      event.threadID,
-      event.messageID
-    );
+    const unknownMsg = 
+      `╭━━━━━━━━━━━━━━━━╮\n` +
+      `│ ⚠️  ${toUnicodeBold("COMMANDE INTROUVABLE")}\n` +
+      `├━━━━━━━━━━━━━━━━╯\n` +
+      `│ ❌ La commande « ${nomCommande} » n'existe pas.\n` +
+      `│ 💡 Tapez « ${prefix}help » pour consulter le menu.\n` +
+      `╰━━━━━━━━━━━━━━━━━`;
+    return reply(unknownMsg);
   }
 
   const cfg = commande.config || {};
 
-  // Vérification des privilèges Administrateur (role === 1 ou adminSeulement)
+  // 1. Vérification Administrateur
   const estAdmin = admins.includes(event.senderID);
-  const roleRequis = cfg.role || 0;
-  const adminSeulement = cfg.adminSeulement || roleRequis > 0;
-
-  if (adminSeulement && !estAdmin) {
-    return api.sendMessage(
-      "❌ Cette commande est réservée aux administrateurs du bot.",
-      event.threadID,
-      event.messageID
-    );
+  if (cfg.adminOnly && !estAdmin) {
+    const adminMsg = 
+      `╭━━━━━━━━━━━━━━━━╮\n` +
+      `│ ⛔  ${toUnicodeBold("ACCÈS RESTREINT")}\n` +
+      `├━━━━━━━━━━━━━━━━╯\n` +
+      `│Cette commande est réservée aux administrateurs du bot.\n` +
+      `╰━━━━━━━━━━━━━━━━━`;
+    return reply(adminMsg);
   }
 
-  // Sélection de la méthode d'exécution (onStart ou run)
-  const executer = commande.onStart || commande.run;
+  // 2. Gestion du Cooldown (anti-spam) avec typographie stylisée
+  const cooldownSec = cfg.cooldown || 2;
+  const keyCooldown = `${event.senderID}_${cfg.name || nomCommande}`;
+  const now = Date.now();
 
+  if (cooldowns.has(keyCooldown)) {
+    const expirationTime = cooldowns.get(keyCooldown) + cooldownSec * 1000;
+    if (now < expirationTime) {
+      const timeLeft = ((expirationTime - now) / 1000).toFixed(1);
+      const cooldownMsg = 
+        `⏳ ${toUnicodeBold("PATIENCE")} : Veuillez attendre ${timeLeft}s avant de réutiliser « ${prefix}${nomCommande} ».`;
+      return reply(cooldownMsg);
+    }
+  }
+
+  cooldowns.set(keyCooldown, now);
+  setTimeout(() => cooldowns.delete(keyCooldown), cooldownSec * 1000);
+
+  // 3. Exécution sécurisée de la commande
   try {
-    await executer({ api, event, args, config, commandes });
+    await commande.run({ api, event, args, reply, config, commandes, toUnicodeBold });
   } catch (error) {
-    console.error(`❌ Erreur d'exécution dans la commande [${nomCommande}] :`, error);
-    api.sendMessage(
-      `❌ Une erreur est survenue lors de l'exécution de la commande "${nomCommande}".`,
-      event.threadID,
-      event.messageID
-    );
+    console.error(`💥 Erreur d'exécution [${nomCommande}] :`, error);
+    const errorMsg = 
+      `╭━━━━━━━━━━━━━━━━╮\n` +
+      `│ 💥  ${toUnicodeBold("ERREUR SYSTÈME")}\n` +
+      `├━━━━━━━━━━━━━━━━╯\n` +
+      `│ Une erreur est survenue lors de l'exécution de « ${nomCommande} ».\n` +
+      `╰━━━━━━━━━━━━━━━━━`;
+    reply(errorMsg);
   }
 }
 
 module.exports = {
   chargerCommandes,
-  gererMessage
+  gererMessage,
+  toUnicodeBold
 };
 
-  
