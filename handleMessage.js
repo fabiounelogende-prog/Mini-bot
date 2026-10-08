@@ -27,14 +27,30 @@ async function gererMessage({ api, event, config, commandes }) {
   if (!body) return;
 
   const { prefix, admins } = config;
-  if (!body.startsWith(prefix)) return;
+  // prefixRequis: false → les commandes marchent aussi sans "!" (utile en PV).
+  // Par défaut (non défini ou true) → le préfixe reste obligatoire.
+  const prefixRequis = config.prefixRequis !== false;
 
-  const args = body.slice(prefix.length).trim().split(/\s+/);
-  const nomCommande = (args.shift() || "").toLowerCase();
+  const avecPrefixe = body.startsWith(prefix);
+  let args, nomCommande;
+
+  if (avecPrefixe) {
+    args = body.slice(prefix.length).trim().split(/\s+/);
+    nomCommande = (args.shift() || "").toLowerCase();
+  } else if (!prefixRequis) {
+    args = body.split(/\s+/);
+    nomCommande = (args.shift() || "").toLowerCase();
+  } else {
+    return; // préfixe obligatoire et absent → on ignore le message
+  }
+
   if (!nomCommande) return;
-
   const commande = commandes.get(nomCommande);
+
   if (!commande) {
+    // Sans préfixe, un message qui ne correspond à aucune commande n'est
+    // pas forcément destiné au bot (conversation normale) → on reste silencieux.
+    if (!avecPrefixe) return;
     return api.sendMessage(`❌ Commande inconnue. Tape ${prefix}help pour voir la liste.`, event.threadID);
   }
 
