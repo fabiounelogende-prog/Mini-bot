@@ -5,17 +5,30 @@ const path = require("path");
 const cooldowns = new Map();
 
 /**
- * Convertit du texte standard en police Unicode Sans-Serif Grasse (Aesthetic Bold)
+ * Convertit du texte standard en police Unicode Sans-Serif Grasse.
+ * Table corrigée (l'ancienne version cassait "j" en caractère chinois
+ * et "G" en doublon de "N") — gardée disponible pour les commandes qui
+ * en ont besoin, mais plus utilisée dans les messages système ci-dessous
+ * (texte simple = plus lisible, plus fiable sur tous les téléphones).
  */
 function toUnicodeBold(str = "") {
   const normal = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  const bold   = "𝖺𝖻𝖼𝖽𝖾𝖿𝗀𝗁𝗂沉𝗄𝗅𝗆𝗇𝗈𝗉𝗊𝗋𝗌𝗍𝗎𝗏𝗐𝗑𝗒𝗓𝖠𝖡𝖢𝖣𝖤𝖥𝖭𝖧𝖨𝖩𝖪𝖫𝖬𝖭𝖮𝖯𝖰𝖱𝖲𝖳𝖴𝖵𝖶𝖷𝖸𝖹𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫";
-  
-  // Mapping direct pour un style élégant et lisible sur tous les téléphones
-  return str.split("").map((char) => {
-    const index = normal.indexOf(char);
-    return index !== -1 ? bold[index] || char : char;
-  }).join("");
+  // Important : ces lettres stylisées sont des caractères "astraux"
+  // (hors du plan de base Unicode) — en JS, une simple chaîne les découpe
+  // en deux unités UTF-16 et casse tout. Array.from() respecte les vrais
+  // caractères, donc chaque élément du tableau est entier.
+  const bold = Array.from(
+    "𝖺𝖻𝖼𝖽𝖾𝖿𝗀𝗁𝗂𝗃𝗄𝗅𝗆𝗇𝗈𝗉𝗊𝗋𝗌𝗍𝗎𝗏𝗐𝗑𝗒𝗓" +
+    "𝖠𝖡𝖢𝖣𝖤𝖥𝖦𝖧𝖨𝖩𝖪𝖫𝖬𝖭𝖮𝖯𝖰𝖱𝖲𝖳𝖴𝖵𝖶𝖷𝖸𝖹" +
+    "𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫"
+  );
+
+  return Array.from(str)
+    .map((char) => {
+      const index = normal.indexOf(char);
+      return index !== -1 ? bold[index] || char : char;
+    })
+    .join("");
 }
 
 /**
@@ -41,7 +54,7 @@ function chargerCommandes(dossier) {
       const nomCmd = config.name;
 
       if (!nomCmd || typeof commande.run !== "function") {
-        console.warn(`⚠️  [CÉLESTIN] Commande ignorée (manque config.name ou run) : ${fichier}`);
+        console.warn(`⚠️  Commande ignorée (manque config.name ou run) : ${fichier}`);
         continue;
       }
 
@@ -53,15 +66,33 @@ function chargerCommandes(dossier) {
         });
       }
     } catch (e) {
-      console.error(`❌ [CÉLESTIN] Erreur lors du chargement de ${fichier} :`, e.message);
+      console.error(`❌ Erreur lors du chargement de ${fichier} :`, e.message);
     }
   }
 
   return commandes;
 }
 
+// Plusieurs variantes pour chaque situation : les réponses du bot varient
+// un peu à chaque fois au lieu de répéter toujours le même message.
+const MESSAGES_PREFIXE_SEUL = [
+  (prefix) => `Hey 👋 tu viens de taper le préfixe seul (« ${prefix} ») — mais tu veux faire quoi exactement ? 🤔\nTape « ${prefix}help » pour voir toutes les commandes.`,
+  (prefix) => `💫 Oui ? Il manque juste le nom de la commande après « ${prefix} ».\nEssaie « ${prefix}help » pour la liste complète.`,
+  (prefix) => `🙂 Je t'écoute, mais « ${prefix} » seul ne veut rien dire pour moi.\nTape « ${prefix}help » et je te montre tout ce que je sais faire.`
+];
+
+const MESSAGES_COMMANDE_INCONNUE = [
+  (prefix, nom) => `❌ La commande « ${nom} » n'existe pas.\n💡 Tape « ${prefix}help » pour voir le menu.`,
+  (prefix, nom) => `🤷 Je ne connais pas « ${nom} ».\nEssaie « ${prefix}help » pour la liste des commandes disponibles.`
+];
+
+function messageAuHasard(liste, ...args) {
+  const fn = liste[Math.floor(Math.random() * liste.length)];
+  return fn(...args);
+}
+
 /**
- * Traite les messages entrants et exécute les commandes avec un design soigné
+ * Traite les messages entrants et exécute les commandes.
  */
 async function gererMessage({ api, event, config, commandes }) {
   const body = (event.body || "").trim();
@@ -70,29 +101,28 @@ async function gererMessage({ api, event, config, commandes }) {
   const prefix = config.prefix || "!";
   const admins = Array.isArray(config.admins) ? config.admins : [];
 
-  // Détection du préfixe
-  if (!body.startsWith(prefix)) return;
-
-  const args = body.slice(prefix.length).trim().split(/\s+/);
-  const nomCommande = (args.shift() || "").toLowerCase();
-
-  if (!nomCommande) return;
-
-  // Raccourci natif "reply" avec mise en page automatique
   const reply = (messageText) => {
     return api.sendMessage(messageText, event.threadID, event.messageID);
   };
 
+  if (!body.startsWith(prefix)) return;
+
+  // Cas spécial : la personne a tapé le préfixe tout seul (ex: juste "!")
+  if (body === prefix) {
+    return reply(messageAuHasard(MESSAGES_PREFIXE_SEUL, prefix));
+  }
+
+  const args = body.slice(prefix.length).trim().split(/\s+/);
+  const nomCommande = (args.shift() || "").toLowerCase();
+
+  // Le préfixe était suivi uniquement d'espaces → même traitement que préfixe seul
+  if (!nomCommande) {
+    return reply(messageAuHasard(MESSAGES_PREFIXE_SEUL, prefix));
+  }
+
   const commande = commandes.get(nomCommande);
   if (!commande) {
-    const unknownMsg = 
-      `╭━━━━━━━━━━━━━━━━╮\n` +
-      `│ ⚠️  ${toUnicodeBold("COMMANDE INTROUVABLE")}\n` +
-      `├━━━━━━━━━━━━━━━━╯\n` +
-      `│ ❌ La commande « ${nomCommande} » n'existe pas.\n` +
-      `│ 💡 Tapez « ${prefix}help » pour consulter le menu.\n` +
-      `╰━━━━━━━━━━━━━━━━━`;
-    return reply(unknownMsg);
+    return reply(messageAuHasard(MESSAGES_COMMANDE_INCONNUE, prefix, nomCommande));
   }
 
   const cfg = commande.config || {};
@@ -100,16 +130,10 @@ async function gererMessage({ api, event, config, commandes }) {
   // 1. Vérification Administrateur
   const estAdmin = admins.includes(event.senderID);
   if (cfg.adminOnly && !estAdmin) {
-    const adminMsg = 
-      `╭━━━━━━━━━━━━━━━━╮\n` +
-      `│ ⛔  ${toUnicodeBold("ACCÈS RESTREINT")}\n` +
-      `├━━━━━━━━━━━━━━━━╯\n` +
-      `│Cette commande est réservée aux administrateurs du bot.\n` +
-      `╰━━━━━━━━━━━━━━━━━`;
-    return reply(adminMsg);
+    return reply("⛔ Cette commande est réservée aux administrateurs du bot.");
   }
 
-  // 2. Gestion du Cooldown (anti-spam) avec typographie stylisée
+  // 2. Gestion du cooldown (anti-spam)
   const cooldownSec = cfg.cooldown || 2;
   const keyCooldown = `${event.senderID}_${cfg.name || nomCommande}`;
   const now = Date.now();
@@ -118,9 +142,7 @@ async function gererMessage({ api, event, config, commandes }) {
     const expirationTime = cooldowns.get(keyCooldown) + cooldownSec * 1000;
     if (now < expirationTime) {
       const timeLeft = ((expirationTime - now) / 1000).toFixed(1);
-      const cooldownMsg = 
-        `⏳ ${toUnicodeBold("PATIENCE")} : Veuillez attendre ${timeLeft}s avant de réutiliser « ${prefix}${nomCommande} ».`;
-      return reply(cooldownMsg);
+      return reply(`⏳ Patiente ${timeLeft}s avant de réutiliser « ${prefix}${nomCommande} ».`);
     }
   }
 
@@ -132,13 +154,7 @@ async function gererMessage({ api, event, config, commandes }) {
     await commande.run({ api, event, args, reply, config, commandes, toUnicodeBold });
   } catch (error) {
     console.error(`💥 Erreur d'exécution [${nomCommande}] :`, error);
-    const errorMsg = 
-      `╭━━━━━━━━━━━━━━━━╮\n` +
-      `│ 💥  ${toUnicodeBold("ERREUR SYSTÈME")}\n` +
-      `├━━━━━━━━━━━━━━━━╯\n` +
-      `│ Une erreur est survenue lors de l'exécution de « ${nomCommande} ».\n` +
-      `╰━━━━━━━━━━━━━━━━━`;
-    reply(errorMsg);
+    reply(`💥 Une erreur est survenue lors de l'exécution de « ${nomCommande} ».\n(détail enregistré dans la console du bot)`);
   }
 }
 
@@ -147,4 +163,3 @@ module.exports = {
   gererMessage,
   toUnicodeBold
 };
-
