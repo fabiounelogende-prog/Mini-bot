@@ -1,5 +1,15 @@
 const fs = require("fs");
 const path = require("path");
+const http = require("http");
+
+// 0. Serveur Web HTTP pour satisfaire la détection de port sur Render
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end("<h1>🤖 Bot Messenger actif !</h1><p>Le bot tourne correctement sur Render.</p>");
+}).listen(PORT, () => {
+  console.log(`🌐 Serveur HTTP démarré sur le port ${PORT}`);
+});
 
 // Résolution robuste de l'import de ws3-fca (gestion de l'export CommonJS / ES Module)
 let login = require("ws3-fca");
