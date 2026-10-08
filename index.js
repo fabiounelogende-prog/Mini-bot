@@ -2,16 +2,16 @@ const fs = require("fs");
 const path = require("path");
 const http = require("http");
 
-// 0. Serveur Web HTTP pour satisfaire la détection de port sur Render
+// Serveur HTTP pour maintenir Render actif
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-  res.end("<h1>🤖 Bot Messenger actif !</h1><p>Le bot tourne correctement sur Render.</p>");
+  res.end("<h1>🤖 Bot Messenger actif !</h1><p>Le bot fonctionne correctement sur Render.</p>");
 }).listen(PORT, () => {
   console.log(`🌐 Serveur HTTP démarré sur le port ${PORT}`);
 });
 
-// Résolution robuste de l'import de ws3-fca (gestion de l'export CommonJS / ES Module)
+// Importation robuste de ws3-fca
 let login = require("ws3-fca");
 if (typeof login !== "function") {
   if (login && typeof login.default === "function") {
@@ -22,9 +22,7 @@ if (typeof login !== "function") {
 }
 
 /**
- * Lit et parse de manière sécurisée un fichier JSON
- * @param {string} filePath - Chemin absolu du fichier JSON
- * @returns {object|null} - Le contenu parsé ou null en cas d'erreur
+ * Lit de manière sécurisée un fichier JSON
  */
 function chargerJsonSecurise(filePath) {
   try {
@@ -37,19 +35,19 @@ function chargerJsonSecurise(filePath) {
   }
 }
 
-// 1. Chargement de la configuration principale
+// 1. Configuration
 const cheminConfig = path.join(__dirname, "config.json");
 const config = chargerJsonSecurise(cheminConfig);
 
 if (!config) {
-  console.error("❌ Impossible de charger 'config.json'. Vérifiez la présence et la syntaxe du fichier.");
+  console.error("❌ Impossible de charger 'config.json'.");
   process.exit(1);
 }
 
-// 2. Import du handler de commandes
+// 2. Handler de commandes
 const { chargerCommandes, gererMessage } = require("./handler/handleMessage.js");
 
-// 3. Détermination du profil/compte Facebook à utiliser
+// 3. Identification du compte
 const nomCompte = config.compteActif || "principal";
 const cheminAccounts = path.join(__dirname, "accounts");
 if (!fs.existsSync(cheminAccounts)) {
@@ -58,10 +56,8 @@ if (!fs.existsSync(cheminAccounts)) {
 
 const cheminAppstate = path.join(cheminAccounts, `${nomCompte}.json`);
 
-// 4. Vérification de l'existence de la session (appstate)
 if (!fs.existsSync(cheminAppstate)) {
-  console.error(`❌ Compte "${nomCompte}" introuvable dans le dossier accounts/ (${cheminAppstate}).`);
-  console.error("👉 Connecte-toi une première fois avec tes cookies Facebook et enregistre-les dans ce fichier.");
+  console.error(`❌ Compte "${nomCompte}" introuvable dans accounts/ (${cheminAppstate}).`);
   process.exit(1);
 }
 
@@ -69,22 +65,21 @@ console.log(`👤 Compte sélectionné : [${nomCompte}]`);
 
 const appstate = chargerJsonSecurise(cheminAppstate);
 if (!appstate) {
-  console.error(`❌ Le fichier de session (${nomCompte}.json) est corrompu ou invalide.`);
+  console.error(`❌ Le fichier de session (${nomCompte}.json) est invalide.`);
   process.exit(1);
 }
 
-// 5. Assurance de l'existence du dossier commands et chargement
+// 4. Chargement des commandes
 const cheminCommandes = path.join(__dirname, "commands");
 if (!fs.existsSync(cheminCommandes)) {
   fs.mkdirSync(cheminCommandes, { recursive: true });
-  console.log("📁 Le dossier 'commands/' a été créé automatiquement.");
 }
 
 const commandes = chargerCommandes(cheminCommandes);
 console.log(`📦 ${commandes.size || 0} commande(s) chargée(s) avec succès.`);
 
 /**
- * Initialise la connexion à l'API Messenger et démarre l'écouteur MQTT
+ * Lancement du bot
  */
 function demarrerBot() {
   if (typeof login !== "function") {
@@ -94,11 +89,10 @@ function demarrerBot() {
 
   login({ appState: appstate }, (err, api) => {
     if (err) {
-      console.error("❌ Erreur critique lors de la connexion Facebook :", err);
+      console.error("❌ Erreur de connexion Facebook :", err);
       return;
     }
 
-    // Options de confidentialité et comportement du bot
     api.setOptions({
       listenEvents: true,
       selfListen: false,
@@ -106,39 +100,39 @@ function demarrerBot() {
       online: false
     });
 
-    const nomBot = config.botName || "GoatBot";
-    console.log(`✅ ${nomBot} est désormais connecté et actif en écoute privée.`);
+    const nomBot = config.botName || "Celestin Bot";
+    console.log(`✅ ${nomBot} connecté et opérationnel !`);
 
-    // Écoute des événements Messenger via le protocole MQTT
     api.listenMqtt(async (listenErr, event) => {
       if (listenErr) {
-        console.error("⚠️ Erreur sur le flux MQTT :", listenErr);
+        console.error("⚠️ Erreur MQTT :", listenErr);
         return;
       }
 
-      // Filtrage : uniquement les messages textes et réponses
       if (event.type !== "message" && event.type !== "message_reply") return;
 
-      // Détection des messages privés (1-à-1)
-      const estPrive = event.threadID === event.senderID;
+      // Encapsulation personnalisée de sendMessage
+      // Si repondreSeulementEnPv est true, toute réponse sera envoyée en message privé (senderID)
+      const apiAdaptee = {
+        ...api,
+        sendMessage: (contents, threadID, callback, messageID) => {
+          const destinataire = config.repondreSeulementEnPv ? event.senderID : threadID;
+          return api.sendMessage(contents, destinataire, callback, messageID);
+        }
+      };
 
-      // Si configuré pour répondre uniquement en PV et que ce n'est pas un PV
-      if (config.repondreSeulementEnPv && !estPrive) return;
-
-      // Traitement du message via le handler
       try {
-        await gererMessage({ api, event, config, commandes });
+        await gererMessage({ api: apiAdaptee, event, config, commandes });
       } catch (cmdError) {
-        console.error(`❌ Erreur d'exécution de commande pour [${event.threadID}] :`, cmdError);
-        api.sendMessage("❌ Une erreur interne est survenue lors du traitement de votre commande.", event.threadID);
+        console.error(`❌ Erreur d'exécution pour [${event.threadID}] :`, cmdError);
+        apiAdaptee.sendMessage("❌ Une erreur interne est survenue.", event.threadID);
       }
     });
   });
 }
 
-// Gestion propre de l'arrêt et des exceptions globales
 process.on("SIGINT", () => {
-  console.log("\n🛑 Arrêt du bot demandé par l'utilisateur...");
+  console.log("\n🛑 Arrêt du bot...");
   process.exit(0);
 });
 
@@ -146,6 +140,5 @@ process.on("uncaughtException", (error) => {
   console.error("💥 Exception non capturée :", error);
 });
 
-// Lancement principal
 demarrerBot();
 
