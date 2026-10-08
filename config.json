@@ -1,9 +1,9 @@
 {
-  "botName": "Celestin",
-  "compteActif": "principal",
-  "prefix": "!",
-  "prefixRequis": true,
-  "admins": ["61591895887142"],
-  "repondreSeulementEnPv": true,
-  "delaiEntreMessagesMs": 1500
+"botName": "Bot option",
+"compteActif": "principal",
+"prefix": "!",
+"prefixRequis": true,
+"admins": ["61591895887142"],
+"repondreSeulementEnPv": true,
+"delaiEntreMessagesMs": 1500
 }
