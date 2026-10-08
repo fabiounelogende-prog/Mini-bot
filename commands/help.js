@@ -1,70 +1,63 @@
 module.exports = {
   config: {
     name: "help",
-    aliases: ["aide", "commands", "menu"],
-    version: "1.0.0",
-    author: "YourName",
-    countDown: 2,
-    role: 0,
-    shortDescription: "Affiche la liste complète des commandes",
-    longDescription: "Affiche toutes les commandes chargées dans le système ou les détails d'une commande spécifique.",
-    category: "system",
-    guide: "{pn} [nom de la commande]"
+    aliases: ["aide", "menu"],
+    description: "Affiche le menu général ou les détails d'une commande",
+    adminOnly: false,
+    cooldown: 2
   },
 
-  run: async function ({ api, event, config, commandes, args }) {
+  run: async function ({ reply, config, commandes, args, toUnicodeBold }) {
     const prefix = config.prefix || "!";
 
-    // 1. Si un nom de commande spécifique est passé en argument (ex: !help massadd)
-    if (args && args.length > 0) {
-      const nomRecherche = args[0].toLowerCase();
-      const cmd = commandes.get(nomRecherche);
+    // 1. Détails d'une commande spécifique
+    if (args.length > 0) {
+      const nom = args[0].toLowerCase();
+      const cmd = commandes.get(nom);
 
       if (!cmd) {
-        return api.sendMessage(
-          `❌ La commande "${nomRecherche}" est introuvable. Tapez \`${prefix}help\` pour voir toutes les commandes.`,
-          event.threadID,
-          event.messageID
-        );
+        return reply(`❌ La commande « ${nom} » n'existe pas. Tapez « ${prefix}help » pour la liste.`);
       }
 
       const cfg = cmd.config || {};
-      let detail = `📖 **FICHE COMMANDE : ${cfg.name?.toUpperCase() || nomRecherche}**\n`;
-      detail += `────────────────────\n`;
-      detail += `📝 **Description :** ${cfg.longDescription || cfg.shortDescription || cfg.description || "Aucune description"}\n`;
-      detail += `🏷️ **Alias :** ${Array.isArray(cfg.aliases) && cfg.aliases.length > 0 ? cfg.aliases.join(", ") : "Aucun"}\n`;
-      detail += `🔒 **Permission :** ${cfg.role === 1 || cfg.adminSeulement ? "Admin uniquement 🔴" : "Tous les membres 🟢"}\n`;
-      detail += `💡 **Usage :** ${cfg.guide ? cfg.guide.replace(/{pn}/g, prefix + cfg.name) : prefix + cfg.name}\n`;
+      const detailMsg = 
+        `╭━━━━━━━━━━━━━━━━╮\n` +
+        `│ 📖  ${toUnicodeBold((cfg.name || nom).toUpperCase())}\n` +
+        `├━━━━━━━━━━━━━━━━╯\n` +
+        `│ 📝 ${toUnicodeBold("Description :")} ${cfg.description || "Aucune description"}\n` +
+        `│ 🏷️ ${toUnicodeBold("Alias :")} ${Array.isArray(cfg.aliases) && cfg.aliases.length > 0 ? cfg.aliases.join(", ") : "Aucun"}\n` +
+        `│ 🔒 ${toUnicodeBold("Accès :")} ${cfg.adminOnly ? "Administrateurs 🔴" : "Membres 🟢"}\n` +
+        `│ ⏳ ${toUnicodeBold("Cooldown :")} ${cfg.cooldown || 2}s\n` +
+        `╰━━━━━━━━━━━━━━━━━`;
 
-      return api.sendMessage(detail, event.threadID, event.messageID);
+      return reply(detailMsg);
     }
 
-    // 2. Affichage de la liste globale des commandes
-    const commandesUniques = new Map();
+    // 2. Liste générale
+    const uniques = new Map();
     commandes.forEach((cmd) => {
       if (cmd.config && cmd.config.name) {
-        commandesUniques.set(cmd.config.name.toLowerCase(), cmd);
+        uniques.set(cmd.config.name.toLowerCase(), cmd);
       }
     });
 
-    let message = `💫 **${config.botName || "Bot"} — MENU DES COMMANDES** 💫\n`;
-    message += `────────────────────\n`;
+    let menu = 
+      `╭━━━━━━━━━━━━━━━━╮\n` +
+      `│ 💫  ${toUnicodeBold(config.botName || "CÉLESTIN BOT")}\n` +
+      `├━━━━━━━━━━━━━━━━╯\n`;
 
-    commandesUniques.forEach((cmd) => {
+    uniques.forEach((cmd) => {
       const cfg = cmd.config || {};
-      const desc = cfg.shortDescription || cfg.description || "Pas de description";
-      message += `• **${prefix}${cfg.name}** : ${desc}\n`;
+      const badge = cfg.adminOnly ? "🔒" : "🟢";
+      menu += `│ ${badge} ${toUnicodeBold(prefix + cfg.name)} — ${cfg.description || "Pas de description"}\n`;
     });
 
-    message += `────────────────────\n`;
-    message += `💡 *Astuce :* Tapez \`${prefix}help <commande>\` pour obtenir des explications détaillées sur une commande.`;
+    menu += 
+      `├━━━━━━━━━━━━━━━━\n` +
+      `│ 💡 Tapez « ${prefix}help <commande> » pour les détails.\n` +
+      `╰━━━━━━━━━━━━━━━━━`;
 
-    return api.sendMessage(message, event.threadID, event.messageID);
-  },
-
-  // Compatibilité avec la syntaxe GoatBot / Cassidy
-  onStart: async function (context) {
-    return this.run(contex
-t);
+    return reply(menu);
   }
 };
+
