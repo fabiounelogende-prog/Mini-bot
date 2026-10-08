@@ -1,0 +1,12 @@
+{
+  "name": "mini-bot",
+  "version": "1.0.0",
+  "description": "Mini bot Facebook - répond uniquement en messages privés",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "fca-unofficial": "^1.5.0"
+  }
+}
