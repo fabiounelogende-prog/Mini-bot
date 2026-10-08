@@ -3,7 +3,7 @@
   "compteActif": "principal",
   "prefix": "!",
   "prefixRequis": true,
-  "admins": ["TON_ID_FACEBOOK_ICI"],
+  "admins": ["61591895887142"],
   "repondreSeulementEnPv": true,
   "delaiEntreMessagesMs": 1500
 }
