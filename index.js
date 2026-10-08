@@ -111,12 +111,11 @@ function demarrerBot() {
 
       if (event.type !== "message" && event.type !== "message_reply") return;
 
-      // Encapsulation personnalisée de sendMessage
-      // Si repondreSeulementEnPv est true, toute réponse sera envoyée en message privé (senderID)
+      // Encapsulation de sendMessage pour répondre dans le groupe courant (threadID)
       const apiAdaptee = {
         ...api,
         sendMessage: (contents, threadID, callback, messageID) => {
-          const destinataire = config.repondreSeulementEnPv ? event.senderID : threadID;
+          const destinataire = config.repondreSeulementEnPv ? event.senderID : (threadID || event.threadID);
           return api.sendMessage(contents, destinataire, callback, messageID);
         }
       };
