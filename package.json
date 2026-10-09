@@ -1,13 +1,20 @@
 {
   "name": "mini-bot",
-  "version": "1.0.0",
-  "description": "Mini bot Facebook - répond uniquement en messages privés",
+  "version": "1.1.0",
+  "description": "Mini bot Facebook Messenger - compatible commandes GoatBot, avec ou sans préfixe",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "ws3-fca": "^3.4.3",
-    "canvas": "^2.11.2"
+    "axios": "1.13.6",
+    "canvas": "^3.2.0",
+    "dotenv": "^16.6.1",
+    "fs-extra": "^11.3.4",
+    "moment-timezone": "^0.5.48",
+    "ws3-fca": "^3.4.3"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
