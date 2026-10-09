@@ -1,9 +1,70 @@
 {
-"botName": "Hentai bot",
-"compteActif": "principal",
-"prefix": "!",
-"prefixRequis": true,
-"admins": ["61591895887142"],
-"repondreSeulementEnPv": false,
-"delaiEntreMessagesMs": 1500
+  "version": "6.1.0",
+
+  "botName": "ʙᴏᴛ ᴍɪsᴛɪsɪ",
+  "compteActif": "principal",
+  "langue": "fr",
+  "fuseauHoraire": "Africa/Kinshasa",
+
+  "prefix": ".",
+  "prefixRequis": true,
+
+  "owners": [],
+  "admins": ["61591895887142"],
+  "banned": [],
+
+  "botActif": true,
+  "messageBotEteint": "🔧 Le bot est en pause pour le moment. Reviens un peu plus tard !",
+  "repondreSeulementEnPv": false,
+  "ignorerPv": false,
+  "ignorerGroupes": false,
+
+  "delaiEntreMessagesMs": 1500,
+  "cooldownParDefautSec": 2,
+  "adminsSansCooldown": true,
+  "antiSpam": {
+    "actif": true,
+    "maxMessages": 8,
+    "fenetreSec": 20,
+    "silenceSec": 60
+  },
+
+  "whitelistActive": false,
+  "whitelistThreads": [],
+  "whitelistUsers": [],
+
+  "commandesDesactivees": [],
+  "commandesAdminSeulement": [],
+  "roleParCommande": {},
+
+  "messages": {
+    "prefixeSeul": true,
+    "commandeInconnue": true,
+    "refusRole": true,
+    "cooldown": true,
+    "commandeDesactivee": true
+  },
+
+  "reactions": {
+    "actives": false,
+    "enCours": "⏳",
+    "succes": "✅",
+    "erreur": "❌"
+  },
+  "marquerLu": false,
+  "logCommandes": true,
+
+  "fca": {
+    "listenEvents": true,
+    "selfListen": false,
+    "updatePresence": false,
+    "online": false
+  },
+  "session": {
+    "tentativesConnexion": 3,
+    "delaiReconnexionSec": 30,
+    "erreursMqttMax": 8,
+    "sauvegardeAppstateMin": 10
+  },
+  "expirationReponsesH": 24
 }
